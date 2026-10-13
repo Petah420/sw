@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -17,9 +18,17 @@ local walkSpeedValue = 60
 local humping = false
 local humpOffset = 0
 local humpDirection = 1
-local attachMode = "FaceSit" -- Kan vara "FaceSit", "Shoulders" eller "Underground"
+local attachMode = "FaceSit" 
 local infiniteJumpEnabled = false
 local currentEmoteTrack = nil
+
+-- Quest Automation States
+local autoAcceptEnabled = false
+local autoLanternsEnabled = false
+local autoTreatsEnabled = false
+local autoTurnInEnabled = false
+local treatsReceivedCount = 0
+local pendingResponse = nil
 
 --------------------------------------------------------------------------------
 -- SAFE ANTI-KICK SETUP
@@ -85,7 +94,7 @@ local function createUI()
         title.TextXAlignment = Enum.TextXAlignment.Left
         title.Parent = frame
 
-        -- Navigation Bar (Tabs - 5 Tabs)
+        -- Navigation Bar (Tabs - 6 Tabs including Quests)
         local tabContainer = Instance.new("Frame")
         tabContainer.Size = UDim2.new(1, -20, 0, 30)
         tabContainer.Position = UDim2.new(0, 10, 0, 35)
@@ -118,6 +127,7 @@ local function createUI()
         local serverPage = createPage("Servers")
         local emotesPage = createPage("Emotes")
         local toolsPage = createPage("Tools")
+        local questsPage = createPage("Quests")
 
         -- Tab Switch Logic
         local function switchTab(btn, page)
@@ -137,7 +147,7 @@ local function createUI()
 
         local function createTabBtn(text, page)
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(0.2, -2, 1, 0)
+            btn.Size = UDim2.new(0.166, -2, 1, 0)
             btn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
             btn.Text = text
             btn.TextColor3 = Color3.fromRGB(150, 150, 165)
@@ -160,6 +170,7 @@ local function createUI()
         local serverTabBtn = createTabBtn("Servers", serverPage)
         local emotesTabBtn = createTabBtn("Emotes", emotesPage)
         local toolsTabBtn = createTabBtn("Tools", toolsPage)
+        local questsTabBtn = createTabBtn("Quests", questsPage)
 
         ------------------------------------------------------------------------
         -- PAGE 1: ATTACH & SPECTATE PAGE SETUP
@@ -402,7 +413,6 @@ local function createUI()
                         offsetCFrame = CFrame.new(0, 1.8, 0.2) * CFrame.Angles(0, 0, 0)
                         localHRP.CFrame = targetHead.CFrame * offsetCFrame
                     elseif attachMode == "Underground" then
-                        -- Följer dynamiskt målets position och höjd, men håller dig 6 studs under dem
                         if targetHRP then
                             local targetPos = targetHRP.Position
                             local rot = targetHRP.CFrame - targetPos
@@ -586,7 +596,7 @@ local function createUI()
             flySpeedValue = val
         end)
 
-        local function createToggleButton(text, onClick)
+        local function createToggleButton(parentFrame, text, onClick)
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -6, 0, 36)
             btn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
@@ -594,7 +604,7 @@ local function createUI()
             btn.TextColor3 = Color3.fromRGB(200, 200, 210)
             btn.TextSize = 11
             btn.Font = Enum.Font.GothamBold
-            btn.Parent = playerScroll
+            btn.Parent = parentFrame
 
             local corner = Instance.new("UICorner")
             corner.CornerRadius = UDim.new(0, 6)
@@ -617,15 +627,15 @@ local function createUI()
             return btn
         end
 
-        createToggleButton("Noclip", function(active)
+        createToggleButton(playerScroll, "Noclip", function(active)
             noclipping = active
         end)
 
-        createToggleButton("Infinite Jump", function(active)
+        createToggleButton(playerScroll, "Infinite Jump", function(active)
             infiniteJumpEnabled = active
         end)
 
-        createToggleButton("Fly (WASD + Space/Shift)", function(active)
+        createToggleButton(playerScroll, "Fly (WASD + Space/Shift)", function(active)
             flying = active
             local char = LocalPlayer.Character
             if not char then return end
@@ -1029,6 +1039,52 @@ local function createUI()
         toolsScroll.CanvasSize = UDim2.new(0, 0, 0, toolsLayout.AbsoluteContentSize.Y)
 
         ------------------------------------------------------------------------
+        -- PAGE 6: QUESTS TAB
+        ------------------------------------------------------------------------
+        local questsScroll = Instance.new("ScrollingFrame")
+        questsScroll.Size = UDim2.new(1, 0, 1, 0)
+        questsScroll.BackgroundTransparency = 1
+        questsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        questsScroll.ScrollBarThickness = 4
+        questsScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 95)
+        questsScroll.Parent = questsPage
+
+        local questsLayout = Instance.new("UIListLayout")
+        questsLayout.Padding = UDim.new(0, 8)
+        questsLayout.Parent = questsScroll
+
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Size = UDim2.new(1, -6, 0, 32)
+        statusLabel.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+        statusLabel.Text = "Status: Idle (Fishing Ignored)"
+        statusLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+        statusLabel.TextSize = 11
+        statusLabel.Font = Enum.Font.GothamBold
+        statusLabel.Parent = questsScroll
+
+        local statusCorner = Instance.new("UICorner")
+        statusCorner.CornerRadius = UDim.new(0, 6)
+        statusCorner.Parent = statusLabel
+
+        createToggleButton(questsScroll, "Auto Accept Quest", function(active)
+            autoAcceptEnabled = active
+        end)
+
+        createToggleButton(questsScroll, "Auto Light Lanterns", function(active)
+            autoLanternsEnabled = active
+        end)
+
+        createToggleButton(questsScroll, "Auto Trick-or-Treat", function(active)
+            autoTreatsEnabled = active
+        end)
+
+        createToggleButton(questsScroll, "Auto Turn-In Quest", function(active)
+            autoTurnInEnabled = active
+        end)
+
+        questsScroll.CanvasSize = UDim2.new(0, 0, 0, questsLayout.AbsoluteContentSize.Y)
+
+        ------------------------------------------------------------------------
         -- GLOBAL RENDER LOOPS (NOCLIP, FLY, INFINITE JUMP, WALKSPEED)
         ------------------------------------------------------------------------
         RunService.RenderStepped:Connect(function()
@@ -1038,7 +1094,6 @@ local function createUI()
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             local hrp = char:FindFirstChild("HumanoidRootPart")
 
-            -- Noclip Loop
             if noclipping then
                 for _, part in ipairs(char:GetDescendants()) do
                     if part:IsA("BasePart") then
@@ -1047,12 +1102,10 @@ local function createUI()
                 end
             end
 
-            -- WalkSpeed Override Loop
             if humanoid then
                 humanoid.WalkSpeed = walkSpeedValue
             end
 
-            -- Fly Loop
             if flying and hrp then
                 local bv = hrp:FindFirstChild("FlyVelocity")
                 local bg = hrp:FindFirstChild("FlyGyro")
@@ -1085,7 +1138,6 @@ local function createUI()
             end
         end)
 
-        -- Infinite Jump Trigger
         UserInputService.JumpRequest:Connect(function()
             if infiniteJumpEnabled then
                 local char = LocalPlayer.Character
@@ -1093,6 +1145,134 @@ local function createUI()
                     local humanoid = char:FindFirstChildOfClass("Humanoid")
                     if humanoid then
                         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end
+            end
+        end)
+
+        ------------------------------------------------------------------------
+        -- HALLOWEEN AUTOMATION BACKGROUND TASK
+        ------------------------------------------------------------------------
+        task.spawn(function()
+            local configSuccess, v1 = pcall(function()
+                return require(ReplicatedStorage:WaitForChild("HalloweenEventConfig"))
+            end)
+            if not configSuccess or not v1 then
+                warn("[HalloweenAuto] Failed to load HalloweenEventConfig.")
+                return
+            end
+
+            local remotes = ReplicatedStorage:WaitForChild(v1.RemotesFolderName)
+            local trickAsk = remotes:WaitForChild("TrickAsk")
+            local eventRemote = remotes:WaitForChild("Event")
+            local getState = remotes:WaitForChild("GetState")
+            local accept = remotes:WaitForChild("Accept")
+            local turnIn = remotes:WaitForChild("TurnIn")
+
+            eventRemote.OnClientEvent:Connect(function(action, data)
+                if type(data) == "table" then
+                    local responseAction = action or data.action
+                    if (responseAction == "TrickAnswer" or responseAction == "TrickResult") or (type(data) == "table" and data.treat ~= nil) then
+                        pendingResponse = data
+                    end
+                end
+            end)
+
+            local function teleportToPlayer(targetPlayer)
+                local character = LocalPlayer.Character
+                local targetCharacter = targetPlayer.Character
+                if character and character:FindFirstChild("HumanoidRootPart") and targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") then
+                    character.HumanoidRootPart.CFrame = targetCharacter.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
+                    return true
+                end
+                return false
+            end
+
+            while task.wait(1.5) do
+                local success, state = pcall(function()
+                    return getState:InvokeServer()
+                end)
+
+                if success and type(state) == "table" then
+                    if autoAcceptEnabled and not state.accepted and not state.completed then
+                        pcall(function() accept:InvokeServer() end)
+                        task.wait(1)
+                    end
+
+                    if state.accepted and not state.completed then
+                        local litTable = type(state.lit) == "table" and state.lit or {}
+                        local treatedTable = type(state.treated) == "table" and state.treated or {}
+                        local litCount = #litTable
+                        local treatCount = #treatedTable
+
+                        statusLabel.Text = string.format("Lanterns: %d/%d | Treats: %d/%d (No Fish)", litCount, v1.LanternsNeeded, treatCount, v1.TreatsNeeded)
+
+                        if autoLanternsEnabled and litCount < v1.LanternsNeeded then
+                            local worldFolder = workspace:FindFirstChild(v1.WorldFolderName)
+                            local lanternsFolder = worldFolder and worldFolder:FindFirstChild("Lanterns")
+                            if lanternsFolder then
+                                local character = LocalPlayer.Character
+                                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                                for _, lantern in ipairs(lanternsFolder:GetChildren()) do
+                                    if lantern:IsA("Model") then
+                                        local prompt = lantern:FindFirstChild("LightPrompt", true)
+                                        local lightPart = lantern:FindFirstChild("Light")
+                                        if prompt and prompt:IsA("ProximityPrompt") then
+                                            local lanternId = lantern:GetAttribute("LanternId")
+                                            local alreadyLit = false
+                                            for _, id in ipairs(litTable) do
+                                                if id == lanternId then alreadyLit = true break end
+                                            end
+                                            if not alreadyLit and lightPart and lightPart:IsA("BasePart") and rootPart then
+                                                local oldCFrame = rootPart.CFrame
+                                                rootPart.CFrame = lightPart.CFrame + Vector3.new(0, 3, 0)
+                                                task.wait(0.2)
+                                                if fireproximityprompt then
+                                                    fireproximityprompt(prompt)
+                                                else
+                                                    prompt:InputHoldBegin()
+                                                    task.wait(prompt.HoldDuration + 0.1)
+                                                    prompt:InputHoldEnd()
+                                                end
+                                                task.wait(0.3)
+                                                rootPart.CFrame = oldCFrame
+                                                task.wait(0.2)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+
+                        if autoTreatsEnabled and treatCount < v1.TreatsNeeded then
+                            for _, player in ipairs(Players:GetPlayers()) do
+                                if player ~= LocalPlayer then
+                                    if teleportToPlayer(player) then
+                                        task.wait(0.3)
+                                    end
+                                    pcall(function() trickAsk:FireServer(player.UserId) end)
+                                    pendingResponse = nil
+                                    local timeout = 5
+                                    local elapsed = 0
+                                    while elapsed < timeout do
+                                        task.wait(0.5)
+                                        elapsed = elapsed + 0.5
+                                        if pendingResponse then
+                                            local resultStr = pendingResponse.result or pendingResponse.choice or pendingResponse.type or pendingResponse[1]
+                                            if resultStr == "treat" or pendingResponse.treat == true then
+                                                treatsReceivedCount = treatsReceivedCount + 1
+                                            end
+                                            break
+                                        end
+                                    end
+                                    break
+                                end
+                            end
+                        end
+
+                        if autoTurnInEnabled and litCount >= v1.LanternsNeeded and treatCount >= v1.TreatsNeeded then
+                            pcall(function() turnIn:InvokeServer() end)
+                        end
                     end
                 end
             end
