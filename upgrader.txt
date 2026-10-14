@@ -1,0 +1,144 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+if playerGui:FindFirstChild("ClickerTesterUI") then
+    playerGui.ClickerTesterUI:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ClickerTesterUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 260, 0, 350)
+mainFrame.Position = UDim2.new(0.5, -130, 0.5, -175)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = mainFrame
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(253, 216, 18)
+stroke.Thickness = 2
+stroke.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "Upgrader Clicker"
+title.TextColor3 = Color3.fromRGB(253, 216, 18)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.Parent = mainFrame
+
+local function createInput(name, defaultText, yPos)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 110, 0, 30)
+    label.Position = UDim2.new(0, 15, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize, label.TextXAlignment = 12, Enum.TextXAlignment.Left
+    label.Parent = mainFrame
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 100, 0, 30)
+    box.Position = UDim2.new(0, 145, 0, yPos)
+    box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Text = defaultText
+    box.Font = Enum.Font.GothamBold
+    box.TextSize = 13
+    box.ClearTextOnFocus = false
+    box.Parent = mainFrame
+
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 4)
+    boxCorner.Parent = box
+
+    local boxStroke = Instance.new("UIStroke")
+    boxStroke.Color = Color3.fromRGB(60, 60, 60)
+    boxStroke.Parent = box
+
+    return box
+end
+
+local minDelayBox = createInput("Min Delay (s):", "0.2", 50)
+local maxDelayBox = createInput("Max Delay (s):", "0.4", 90)
+local minBox = createInput("Min Clicks:", "5", 130)
+local maxBox = createInput("Max Clicks:", "10", 170)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -30, 0, 25)
+statusLabel.Position = UDim2.new(0, 15, 0, 215)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 12
+statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+statusLabel.Parent = mainFrame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, -30, 0, 45)
+toggleButton.Position = UDim2.new(0, 15, 0, 255)
+toggleButton.BackgroundColor3 = Color3.fromRGB(253, 216, 18)
+toggleButton.Text = "START AUTOCLICKER"
+toggleButton.TextColor3 = Color3.fromRGB(15, 15, 15)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 14
+toggleButton.Parent = mainFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = toggleButton
+
+local running = false
+local clickerEvent = ReplicatedStorage:WaitForChild("UPGRemotes"):WaitForChild("ClickerEvent")
+
+toggleButton.MouseButton1Click:Connect(function()
+    running = not running
+    if running then
+        toggleButton.Text = "STOP AUTOCLICKER"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+        statusLabel.Text = "Status: Running..."
+        statusLabel.TextColor3 = Color3.fromRGB(50, 220, 50)
+        
+        task.spawn(function()
+            while running do
+                local minDel = tonumber(minDelayBox.Text) or 0.05
+                local maxDel = tonumber(maxDelayBox.Text) or 0.2
+                if minDel > maxDel then maxDel = minDel end
+                
+                local minVal = tonumber(minBox.Text) or 1
+                local maxVal = tonumber(maxBox.Text) or 15
+                if minVal > maxVal then maxVal = minVal end
+                
+                local randomClicks = math.random(minVal, maxVal)
+                local randomDelay = math.random() * (maxDel - minDel) + minDel
+                
+                pcall(function()
+                    clickerEvent:FireServer(randomClicks)
+                end)
+                
+                task.wait(math.max(randomDelay, 0.01))
+            end
+        end)
+    else
+        toggleButton.Text = "START AUTOCLICKER"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(253, 216, 18) -- Back to Yellow
+        statusLabel.Text = "Status: Idle"
+        statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    end
+end)
+
+print("sucess")
