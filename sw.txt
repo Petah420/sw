@@ -1151,17 +1151,15 @@ local function createUI()
         end)
 
         ------------------------------------------------------------------------
-        -- HALLOWEEN AUTOMATION BACKGROUND TASK (WITH EXTENSIVE DEBUGGING)
+        -- HALLOWEEN AUTOMATION BACKGROUND TASK
         ------------------------------------------------------------------------
         task.spawn(function()
             local configSuccess, v1 = pcall(function()
                 return require(ReplicatedStorage:WaitForChild("HalloweenEventConfig"))
             end)
             if not configSuccess or not v1 then
-                warn("[HalloweenAuto DEBUG] CRITICAL: Failed to load HalloweenEventConfig from ReplicatedStorage!")
+                warn("[HalloweenAuto] Failed to load HalloweenEventConfig.")
                 return
-            else
-                print("[HalloweenAuto DEBUG] Config successfully loaded. WorldFolderName:", tostring(v1.WorldFolderName), "| RemotesFolderName:", tostring(v1.RemotesFolderName))
             end
 
             local remotes = ReplicatedStorage:WaitForChild(v1.RemotesFolderName)
@@ -1195,13 +1193,9 @@ local function createUI()
                     return getState:InvokeServer()
                 end)
 
-                if not success or type(state) ~= "table" then
-                    warn("[HalloweenAuto DEBUG] Failed to fetch state from server or state is not a table!")
-                else
+                if success and type(state) == "table" then
                     if autoAcceptEnabled and not state.accepted and not state.completed then
-                        print("[HalloweenAuto DEBUG] Quest not accepted. Firing Accept remotes...")
-                        local accSucc, accMsg = pcall(function() return accept:InvokeServer() end)
-                        print("[HalloweenAuto DEBUG] Accept result:", accSucc, accMsg)
+                        pcall(function() accept:InvokeServer() end)
                         task.wait(1)
                     end
 
@@ -1213,55 +1207,36 @@ local function createUI()
 
                         statusLabel.Text = string.format("Lanterns: %d/%d | Treats: %d/%d (No Fish)", litCount, v1.LanternsNeeded, treatCount, v1.TreatsNeeded)
 
-                        -- LANTERN DEBUG SCANNING
                         if autoLanternsEnabled and litCount < v1.LanternsNeeded then
                             local worldFolder = workspace:FindFirstChild(v1.WorldFolderName)
-                            if not worldFolder then
-                                warn("[HalloweenAuto DEBUG] Workspace folder not found by name:", tostring(v1.WorldFolderName))
-                            else
-                                local lanternsFolder = worldFolder and worldFolder:FindFirstChild("Lanterns")
-                                if not lanternsFolder then
-                                    warn("[HalloweenAuto DEBUG] 'Lanterns' subfolder not found inside workspace folder:", tostring(v1.WorldFolderName))
-                                else
-                                    local character = LocalPlayer.Character
-                                    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                                    
-                                    for _, lantern in ipairs(lanternsFolder:GetChildren()) do
-                                        if lantern:IsA("Model") then
-                                            local prompt = lantern:FindFirstChild("LightPrompt", true)
-                                            local lightPart = lantern:FindFirstChild("Light")
-                                            
-                                            if prompt and prompt:IsA("ProximityPrompt") then
-                                                local lanternId = lantern:GetAttribute("LanternId") or lantern.Name
-                                                local alreadyLit = false
-                                                
-                                                for _, id in ipairs(litTable) do
-                                                    if id == lanternId then 
-                                                        alreadyLit = true 
-                                                        break 
-                                                    end
+                            local lanternsFolder = worldFolder and worldFolder:FindFirstChild("Lanterns")
+                            if lanternsFolder then
+                                local character = LocalPlayer.Character
+                                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                                for _, lantern in ipairs(lanternsFolder:GetChildren()) do
+                                    if lantern:IsA("Model") then
+                                        local prompt = lantern:FindFirstChild("LightPrompt", true)
+                                        local lightPart = lantern:FindFirstChild("Light")
+                                        if prompt and prompt:IsA("ProximityPrompt") then
+                                            local lanternId = lantern:GetAttribute("LanternId")
+                                            local alreadyLit = false
+                                            for _, id in ipairs(litTable) do
+                                                if id == lanternId then alreadyLit = true break end
+                                            end
+                                            if not alreadyLit and lightPart and lightPart:IsA("BasePart") and rootPart then
+                                                local oldCFrame = rootPart.CFrame
+                                                rootPart.CFrame = lightPart.CFrame + Vector3.new(0, 3, 0)
+                                                task.wait(0.2)
+                                                if fireproximityprompt then
+                                                    fireproximityprompt(prompt)
+                                                else
+                                                    prompt:InputHoldBegin()
+                                                    task.wait(prompt.HoldDuration + 0.1)
+                                                    prompt:InputHoldEnd()
                                                 end
-
-                                                if not alreadyLit then
-                                                    if lightPart and lightPart:IsA("BasePart") and rootPart then
-                                                        print("[HalloweenAuto DEBUG] Lighting unlit lantern:", lantern.Name, "| ID:", tostring(lanternId))
-                                                        local oldCFrame = rootPart.CFrame
-                                                        rootPart.CFrame = lightPart.CFrame + Vector3.new(0, 3, 0)
-                                                        task.wait(0.2)
-                                                        if fireproximityprompt then
-                                                            fireproximityprompt(prompt)
-                                                        else
-                                                            prompt:InputHoldBegin()
-                                                            task.wait(prompt.HoldDuration + 0.1)
-                                                            prompt:InputHoldEnd()
-                                                        end
-                                                        task.wait(0.3)
-                                                        rootPart.CFrame = oldCFrame
-                                                        task.wait(0.2)
-                                                    else
-                                                        warn("[HalloweenAuto DEBUG] Lantern found ('" .. lantern.Name .. "'), but missing 'Light' part or RootPart!")
-                                                    end
-                                                end
+                                                task.wait(0.3)
+                                                rootPart.CFrame = oldCFrame
+                                                task.wait(0.2)
                                             end
                                         end
                                     end
@@ -1296,9 +1271,7 @@ local function createUI()
                         end
 
                         if autoTurnInEnabled and litCount >= v1.LanternsNeeded and treatCount >= v1.TreatsNeeded then
-                            print("[HalloweenAuto DEBUG] Requirements met! Firing TurnIn...")
-                            local turnSucc, turnMsg = pcall(function() return turnIn:InvokeServer() end)
-                            print("[HalloweenAuto DEBUG] TurnIn result:", turnSucc, turnMsg)
+                            pcall(function() turnIn:InvokeServer() end)
                         end
                     end
                 end
